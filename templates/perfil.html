@@ -1,0 +1,45 @@
+{% extends 'base.html' %}
+
+{% block title %}Perfil{% endblock %}
+
+{% block content %}
+  <style>
+    body {
+      background-color: #121212;
+      color: #eee;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      padding: 20px;
+    }
+    h2 {
+      color: #0af;
+      text-align: center;
+      margin-bottom: 30px;
+    }
+    .perfil-container {
+      max-width: 500px;
+      margin: auto;
+      background-color: #222;
+      padding: 25px 30px;
+      border-radius: 8px;
+      box-shadow: 0 0 10px #0af4;
+    }
+    .perfil-item {
+      margin-bottom: 15px;
+      font-size: 18px;
+    }
+    .perfil-item strong {
+      color: #0af;
+    }
+  </style>
+
+  <div class="perfil-container">
+    <h2>Perfil do Usuário</h2>
+
+    <div class="perfil-item"><strong>Nome:</strong> {{ nome }}</div>
+    <div class="perfil-item"><strong>Email:</strong> {{ email }}</div>
+    <div class="perfil-item"><strong>Banca Inicial:</strong> R$ {{ "{:,.2f}".format(banca_inicial).replace('.', ',') }}</div>
+    <div class="perfil-item"><strong>Banca Atualizada:</strong> R$ {{ "{:,.2f}".format(banca_atual).replace('.', ',') }}</div>
+    <div class="perfil-item"><strong>Rendimento:</strong> {{ "{:,.2f}".format(rendimento_pct).replace('.', ',') }}%</div>
+
+</div>
+{% endblock %}

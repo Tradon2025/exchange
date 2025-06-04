@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <title>Estatísticas de Apostas</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <h3 style="color: white;">Banca Inicial: R$ {{ banca_inicial|br_moeda }}</h3>
+
+
+  <style>
+    body {
+      background-color: #121212;
+      color: #eee;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      margin: 20px;
+    }
+    h1 {
+      text-align: center;
+      margin-bottom: 25px;
+      color: #0af;
+    }
+    .chart-container {
+      position: relative;
+      width: 90%;
+      max-width: 800px;
+      margin: auto;
+      background-color: #1e1e1e;
+      padding: 20px;
+      border-radius: 10px;
+    }
+    canvas {
+      background-color: transparent;
+    }
+    .btn-voltar {
+      margin-top: 20px;
+      background-color: #666;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      float: right;
+      transition: background-color 0.2s;
+    }
+    .btn-voltar:hover {
+      background-color: #444;
+    }
+  </style>
+  <!-- Chart.js via CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+  <h1>📈 Evolução da Banca</h1>
+
+  <div class="chart-container">
+    <canvas id="bancaChart"></canvas>
+  </div>
+
+  <button class="btn-voltar"
+          onclick='window.location.href="{{ url_for('apostas') }}"'>
+    ← Voltar ao Histórico
+  </button>
+
+  <script>
+    // Transforma as listas Python (labels, banca) em arrays JavaScript
+    const labels = {{ labels | tojson }};
+    const dataBanca = {{ banca | tojson }};
+
+    const ctx = document.getElementById('bancaChart').getContext('2d');
+    new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: 'Saldo Acumulado (R$)',
+          data: dataBanca,
+          borderColor: '#0af',
+          backgroundColor: 'rgba(10, 164, 255, 0.3)',
+          fill: true,
+          tension: 0.2,
+          pointRadius: 4,
+          pointBackgroundColor: '#0af',
+          pointBorderColor: '#fff'
+        }]
+      },
+      options: {
+        scales: {
+          x: {
+            ticks: { color: '#eee' },
+            grid: { color: '#333' }
+          },
+          y: {
+            ticks: {
+              color: '#eee',
+              callback: function(value) {
+                return 'R$ ' + value.toFixed(2).replace('.', ',');
+              }
+            },
+            grid: { color: '#333' }
+          }
+        },
+        plugins: {
+          legend: {
+            labels: {
+              color: '#eee',
+              font: { size: 14 }
+            }
+          },
+          tooltip: {
+            callbacks: {
+              label: function(context) {
+                let v = context.parsed.y;
+                return 'R$ ' + v.toFixed(2).replace('.', ',');
+              }
+            }
+          }
+        }
+      }
+    });
+  </script>
+</body>
+</html>

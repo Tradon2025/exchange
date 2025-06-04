@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <title>Histórico de Apostas</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body {
+      background-color: #121212;
+      color: #eee;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      margin: 20px;
+    }
+    h1 {
+      text-align: center;
+      margin-bottom: 15px;
+      color: rgb(31, 90, 199);
+    }
+
+    .button-group {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    .btn-export,
+    .btn-estat {
+      background-color: rgb(31, 90, 199);
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: bold;
+      transition: background-color 0.2s;
+    }
+    .btn-export:hover,
+    .btn-estat:hover {
+      background-color: rgb(31, 90, 199);
+    }
+
+    form.filtro {
+      margin-bottom: 15px;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    form.filtro label {
+      font-weight: bold;
+    }
+    input[type="date"],
+    select {
+      padding: 6px 10px;
+      border-radius: 5px;
+      border: none;
+      outline: none;
+      font-size: 14px;
+      background-color: #2a2a2a;
+      color: #fff;
+    }
+
+    /* Contêiner para a tabela, com altura fixa e rolagem vertical */
+    .table-container {
+      max-height: 60vh;
+      overflow-y: auto;
+      border: 1px solid #333;
+      border-radius: 6px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+    thead {
+      background-color: #222;
+    }
+    th, td {
+      padding: 10px 8px;
+      border-bottom: 1px solid #333;
+      text-align: center;
+    }
+    /* Cabeçalho fixo */
+    th {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      background-color: #222;
+    }
+    /* Texto à esquerda em colunas de texto (Método, Casa, Visitante) */
+    th:nth-child(3), td:nth-child(3),
+    th:nth-child(4), td:nth-child(4),
+    th:nth-child(5), td:nth-child(5) {
+      text-align: left;
+      padding-left: 12px;
+    }
+    tr:hover {
+      background-color: #333;
+    }
+    .actions form {
+      display: inline-block;
+      margin: 0;
+      padding: 0;
+    }
+    .actions button {
+      min-width: 70px;
+    }
+
+    .btn-voltar {
+      background-color: rgb(31, 90, 199);
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: bold;
+      transition: background-color 0.2s;
+      margin-top: 20px;
+    }
+    .btn-voltar:hover {
+      background-color: rgb(31, 90, 199);
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Histórico de Entradas</h1>
+
+<div class="button-group">
+  <button class="btn-export"
+          onclick="window.location.href='{{ url_for('exportar_apostas', data_inicio=data_inicio_iso, data_fim=data_fim_iso, metodo=metodo) }}'">
+    Exportar Excel
+  </button>
+
+  <button class="btn-estat"
+          onclick="window.location.href='{{ url_for('estatisticas') }}'">
+    Evolução da Banca 
+    
+  </button>
+    <button class="btn-estat"
+            onclick="window.location.href='{{ url_for('estatisticas_diarias_completa') }}'">
+    Ver Estatísticas Diárias (Completo)
+    </button>
+  <!-- Atualize para 'calendario' se você só tiver essa rota -->
+  <button class="btn-estat"
+          onclick="window.location.href='{{ url_for('calendario') }}'">
+    Ver Calendário Mensal
+  </button>
+</div>
+
+
+
+
+  <form method="get" class="filtro" action="{{ url_for('apostas') }}">
+    <label for="data_inicio">Data Início:</label>
+    <input type="date" id="data_inicio" name="data_inicio" value="{{ data_inicio_iso }}">
+
+    <label for="data_fim">Data Fim:</label>
+    <input type="date" id="data_fim" name="data_fim" value="{{ data_fim_iso }}">
+
+    <label for="metodo">Método:</label>
+    <select name="metodo" id="metodo">
+      <option value="" {% if not metodo %}selected{% endif %}>Todos</option>
+      <option value="O HT" {% if metodo == 'O HT' %}selected{% endif %}>O HT</option>
+      <option value="O FT" {% if metodo == 'O FT' %}selected{% endif %}>O FT</option>
+      <option value="Outros" {% if metodo == 'Outros' %}selected{% endif %}>Outros</option>
+    </select>
+
+    <button type="submit" class="btn-estat">Filtrar</button>
+  </form>
+
+  <!-- Contêiner com rolagem -->
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Data</th>
+          <th>Método</th>
+          <th>Casa</th>
+          <th>Visitante</th>
+          <th>Stake</th>
+          <th>Odd</th>
+          <th>Minuto Gol</th>
+          <th>Valor Realizado</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for aposta in apostas %}
+        <tr>
+          <td>{{ loop.index }}</td>
+          <td>{{ aposta[2] }}</td>
+          <td>{{ aposta[3] }}</td>
+          <td>{{ aposta[4] }}</td>
+          <td>{{ aposta[5] }}</td>
+          <td>R$ {{ ('%.2f' % aposta[6]|float).replace('.', ',') }}</td>
+          <td>{{ aposta[7] }}</td>
+          <td>{{ aposta[8] }}</td>
+          <td>R$ {{ ('%.2f' % aposta[9]|float).replace('.', ',') }}</td>
+          <td class="actions">
+            <form method="get" action="{{ url_for('editar_aposta', id=aposta[0]) }}" aria-label="Editar aposta {{ loop.index }}">
+              <button type="submit" class="btn-estat" style="background-color: #28a745; margin-right:6px;">Editar</button>
+            </form>
+            <form method="post" action="{{ url_for('excluir_aposta', id=aposta[0]) }}" onsubmit="return confirm('Tem certeza que deseja excluir esta aposta?');" aria-label="Excluir aposta {{ loop.index }}">
+              <button type="submit" class="btn-estat" style="background-color: #dc3545;">Excluir</button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="10">Nenhuma aposta encontrada.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+<button class="btn-voltar" onclick="window.location.href='/'">Voltar para Cadastro</button>
+<button class="btn-voltar" onclick="window.location.href='{{ url_for('perfil') }}'">Meu Perfil</button>
+
+
+
+
+</body>
+</html>

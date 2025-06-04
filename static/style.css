@@ -1,0 +1,110 @@
+body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background-color: #1c1c1c;
+    color: white;
+}
+
+.sidebar {
+    width: 230px;
+    background-color: #111;
+    height: 100vh;
+    position: fixed;
+    padding-top: 20px;
+}
+
+.sidebar h2 {
+    color: #fff;
+    text-align: center;
+    margin-bottom: 30px;
+}
+
+.sidebar a {
+    padding: 15px 20px;
+    display: block;
+    color: #ccc;
+    text-decoration: none;
+    transition: 0.3s;
+}
+
+.sidebar a:hover {
+    background-color: #333;
+    color: white;
+}
+
+.sidebar i {
+    margin-right: 10px;
+}
+
+.main {
+    margin-left: 230px;
+    padding: 20px;
+}
+
+.info-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 20px;
+    margin-top: 20px;
+}
+
+.card {
+    background-color: #222;
+    padding: 20px;
+    border-radius: 12px;
+    text-align: center;
+    font-size: 18px;
+    color: #fff;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.4);
+}
+
+.btn-voltar,
+.btn-export,
+.btn-estat,
+button {
+  background-color: #003366;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: bold;
+  transition: background-color 0.2s;
+  margin-top: 10px;
+}
+
+.btn-voltar:hover,
+.btn-export:hover,
+.btn-estat:hover,
+button:hover {
+  background-color: #002244;
+}
+
+/* Remove o brilho azul de foco */
+.toggle-btn:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.toggle-btn {
+  background-color: transparent;
+  border: none;
+  color: white;
+  font-size: 24px;
+  cursor: pointer;
+  margin-bottom: 20px;
+  text-align: left;
+  padding-left: 5px;
+  -webkit-tap-highlight-color: transparent; /* Remove highlight azul no mobile/Chrome */
+  outline: none;
+  box-shadow: none;
+}
+
+.toggle-btn:focus,
+.toggle-btn:active,
+.toggle-btn:hover {
+  background-color: transparent !important;
+  outline: none !important;
+  box-shadow: none !important;
+}

@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Projeção de Banca</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        body {
+            background-color: #121212;
+            color: white;
+            font-family: Arial, sans-serif;
+        }
+        .container {
+            max-width: 900px;
+            margin: auto;
+            padding: 30px;
+        }
+        input, button {
+            padding: 8px;
+            margin: 5px 0;
+            border-radius: 6px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            background: #1e1e1e;
+        }
+        th, td {
+            border: 1px solid #444;
+            padding: 10px;
+            text-align: center;
+        }
+        th {
+            background-color: #333;
+        }
+        .btn {
+            background-color: #0af;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        .btn:hover {
+            background-color: #08c;
+        }
+    </style>
+</head>
+<body>
+    {% block content %}
+    <div class="container">
+        <h1>🔮 Projeção de Banca</h1>
+
+        <form method="POST" class="form-projecao">
+            <label>Data Inicial:</label><br>
+            <input type="date" name="data_inicio" required><br>
+
+            <label>Data Final:</label><br>
+            <input type="date" name="data_fim" required><br>
+
+            <label>Banca Inicial (R$):</label><br>
+            <input type="text" name="banca_inicial" required><br>
+
+            <label>Lucro Diário (%)</label><br>
+            <input type="text" name="percentual" required><br>
+
+            <button class="btn btn-primary" type="submit">Calcular Projeção</button>
+        </form>
+
+        {% if resultados %}
+        <h2>📅 Resultado</h2>
+        <table class="table-projecao">
+             <thead>
+        <tr>
+            <th>Data</th>
+            <th>Banca Projetada (R$)</th>
+            <th>Lucro Projetado Diário (R$)</th>
+            <th>Lucro Real do Dia (R$)</th>
+            <th>Banca Real Acumulada (R$)</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for item in resultados %}
+        <tr>
+            <td>{{ item.data }}</td>
+            <td>R$ {{ item.banca_projetada | br_moeda }}</td>
+            <td>R$ {{ item.lucro_projetado_diario | br_moeda }}</td>
+            <td>R$ {{ item.lucro_real_dia | br_moeda }}</td>
+            <td>R$ {{ item.banca_real_acumulada | br_moeda }}</td>
+        </tr>
+        {% endfor %}
+        <button class="btn-voltar" onclick="window.location.href='{{ url_for('apostas') }}'">
+    ← Voltar ao Histórico
+  </button>
+    </tbody>
+</table>
+        {% endif %}
+    </div>
+    {% endblock %}
+</body>
+</html>
