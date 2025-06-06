@@ -198,7 +198,7 @@
     <i class="fas fa-user"></i><span class="link-text">Perfil</span>
     </a>  
     <a href="{{ url_for('status_reds') }}" class="{% if request.endpoint == 'status_reds' %}active{% endif %}">
-    <i class="fas fa-chart-line" style="transform: rotate(180deg);"></i> <span class="link-text">Bad Run</span>
+        <i class="fas fa-ban"></i><span class="link-text">Bad Run</span>
     </a>  
     <a href="{{ url_for('logout') }}" class="{% if request.endpoint == 'logout' %}active{% endif %}">
       <i class="fas fa-sign-out-alt"></i><span class="link-text">Sair</span>
