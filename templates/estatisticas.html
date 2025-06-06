@@ -1,11 +1,8 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-  <meta charset="UTF-8" />
-  <title>Estatísticas de Apostas</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <h3 style="color: white;">Banca Inicial: R$ {{ banca_inicial|br_moeda }}</h3>
+{% extends 'base.html' %}
 
+{% block title %}estatisticas{% endblock %}
+
+{% block content %}
 
   <style>
     body {
@@ -17,7 +14,7 @@
     h1 {
       text-align: center;
       margin-bottom: 25px;
-      color: #0af;
+      color: #1A5E9E;
     }
     .chart-container {
       position: relative;
@@ -57,11 +54,6 @@
     <canvas id="bancaChart"></canvas>
   </div>
 
-  <button class="btn-voltar"
-          onclick='window.location.href="{{ url_for('apostas') }}"'>
-    ← Voltar ao Histórico
-  </button>
-
   <script>
     // Transforma as listas Python (labels, banca) em arrays JavaScript
     const labels = {{ labels | tojson }};
@@ -75,7 +67,7 @@
         datasets: [{
           label: 'Saldo Acumulado (R$)',
           data: dataBanca,
-          borderColor: '#0af',
+          borderColor: '#1A5E9E',
           backgroundColor: 'rgba(10, 164, 255, 0.3)',
           fill: true,
           tension: 0.2,
@@ -121,3 +113,4 @@
   </script>
 </body>
 </html>
+{% endblock %}
