@@ -1,14 +1,17 @@
-from flask import Flask, render_template, request, redirect, session, url_for, send_file
+from flask import Flask, render_template, request, redirect, session, url_for, send_file, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
 import sqlite3, os, io
 from datetime import datetime, date, timedelta
 import pandas as pd
 import calendar
-from collections import OrderedDict
+from collections import OrderedDict, defaultdict
 from flask import g
+import requests
 
 app = Flask(__name__)
-app.secret_key = "sua_chave_secreta_aqui"  # Lembre de alterar
+app.secret_key = "sua_chave_secreta_aqui"  # Lembre de 
+
+API_KEY = "1aad7161eb43d298147857d33667dc62"
 
 # Filtro Jinja para trocar ponto por vírgula
 def ponto_para_virgula(valor):
@@ -62,6 +65,7 @@ def criar_banco():
             odd REAL,
             minuto_gol INTEGER,
             valor_realizado REAL,
+            resultado TEXT,
             FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
         )
     ''')
@@ -134,11 +138,14 @@ def index():
     if request.method == "POST":
         usuario_id = session["usuario_id"]
         data_input = request.form["data"]
+
         try:
             data_obj = datetime.strptime(data_input, "%Y-%m-%d")
             data_banco = data_obj.strftime("%Y-%m-%d")
         except ValueError:
             return "Data inválida. Use o seletor de data do navegador."
+
+        resultado = request.form["resultado"].strip().lower()
 
         dados = (
             usuario_id,
@@ -149,28 +156,60 @@ def index():
             float(request.form["stake"]),
             float(request.form["odd"]),
             int(request.form["minuto_gol"]),
-            float(request.form["valor_realizado"])
+            float(request.form["valor_realizado"]),
+            resultado
         )
+
         conn = sqlite3.connect("banco.db")
         cursor = conn.cursor()
         cursor.execute('''
             INSERT INTO apostas (
-                usuario_id, data, metodo, casa, visitante, stake, odd, minuto_gol, valor_realizado
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                usuario_id, data, metodo, casa, visitante, stake, odd, minuto_gol, valor_realizado, resultado
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', dados)
         conn.commit()
         conn.close()
+
         return redirect("/apostas")
 
     return render_template("index.html")
 
 
-@app.route("/apostas")
+
+@app.route("/apostas", methods=["GET", "POST"])
 def apostas():
     if "usuario_id" not in session:
         return redirect("/login")
 
     usuario_id = session["usuario_id"]
+
+    # --- LÓGICA PARA INSERIR NOVA APOSTA ---
+    if request.method == "POST":
+        data = request.form["data"]
+        metodo = request.form["metodo"]
+        casa = request.form["casa"]
+        visitante = request.form["visitante"]
+        stake = request.form["stake"]
+        odd = request.form["odd"]
+        minuto_gol = request.form.get("minuto_gol")
+        valor_realizado = request.form["valor_realizado"]
+
+        conn = sqlite3.connect("banco.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO apostas 
+            (usuario_id, data, metodo, casa, visitante, stake, odd, minuto_gol, valor_realizado)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            usuario_id, data, metodo, casa, visitante,
+            float(stake), float(odd), minuto_gol if minuto_gol else None, float(valor_realizado)
+        ))
+        conn.commit()
+        conn.close()
+
+        return redirect("/apostas")  # Redireciona após o POST para evitar reenvio em refresh
+
+    # --- LÓGICA PARA EXIBIR HISTÓRICO (GET) ---
     data_inicio = request.args.get("data_inicio")
     data_fim = request.args.get("data_fim")
     metodo = request.args.get("metodo")
@@ -202,25 +241,13 @@ def apostas():
         except:
             data_formatada = data_str
 
-        minuto_gol = aposta[8]
-        if minuto_gol is None:
-            minuto_gol = ''  # deixa vazio se não informado
+        minuto_gol = aposta[8] if aposta[8] is not None else ''
 
         apostas_formatadas.append((
-            aposta[0],      # id
-            aposta[1],      # usuario_id
-            data_formatada, # data
-            aposta[3],      # metodo
-            aposta[4],      # casa
-            aposta[5],      # visitante
-            aposta[6],      # stake
-            aposta[7],      # odd
-            minuto_gol,     # minuto_gol (trata None)
-            aposta[9],      # valor_realizado
-            sequencial      # número sequencial
+            aposta[0], aposta[1], data_formatada, aposta[3], aposta[4], aposta[5],
+            aposta[6], aposta[7], minuto_gol, aposta[9], sequencial
         ))
         sequencial += 1
-
 
     total_apostas = len(apostas)
     total_stake = sum(float(a[6]) for a in apostas) if total_apostas > 0 else 0.0
@@ -244,6 +271,7 @@ def apostas():
     data_inicio_iso = converte_para_iso(data_inicio)
     data_fim_iso = converte_para_iso(data_fim)
 
+  
     return render_template(
         "apostas.html",
         apostas=apostas_formatadas,
@@ -256,7 +284,8 @@ def apostas():
         lucro=lucro,
         roi=roi,
         winrate=winrate
-    )
+           )
+
 
 @app.route("/apostas/excluir/<int:id>", methods=["POST"])
 def excluir_aposta(id):
@@ -327,7 +356,10 @@ def exportar_apostas():
     data_fim = request.args.get("data_fim")
     metodo = request.args.get("metodo")
 
-    query = "SELECT id, data, metodo, casa, visitante, stake, odd, minuto_gol, valor_realizado FROM apostas WHERE usuario_id = ?"
+    query = """
+        SELECT id, data, metodo, casa, visitante, stake, odd, minuto_gol, valor_realizado
+        FROM apostas WHERE usuario_id = ?
+    """
     params = [usuario_id]
     if data_inicio:
         query += " AND data >= ?"
@@ -339,7 +371,8 @@ def exportar_apostas():
         query += " AND metodo = ?"
         params.append(metodo)
 
-    conn = sqlite3.connect("banco.db")
+    # ✅ Conexão segura para múltiplos threads
+    conn = sqlite3.connect("banco.db", check_same_thread=False)
     cursor = conn.cursor()
     cursor.execute(query, params)
     apostas = cursor.fetchall()
@@ -364,16 +397,20 @@ def exportar_apostas():
     )
 
 
+
 @app.route("/estatisticas")
 def estatisticas():
     if "usuario_id" not in session:
         return redirect("/login")
 
     usuario_id = session["usuario_id"]
-    banca_inicial = 50.0  # ou pegue do banco
 
+    # Exemplo: pegar a banca inicial do banco (recomendo esse caminho)
     conn = sqlite3.connect("banco.db")
     cursor = conn.cursor()
+    cursor.execute("SELECT banca_inicial FROM usuarios WHERE id = ?", (usuario_id,))
+    result = cursor.fetchone()
+    banca_inicial = result[0] if result else 0.0
 
     cursor.execute("""
         SELECT data, stake, odd, valor_realizado
@@ -405,6 +442,7 @@ def estatisticas():
                            labels=labels,
                            banca=banca,
                            banca_inicial=banca_inicial)
+
 
 
 @app.route("/estatisticas_diarias")
@@ -515,6 +553,14 @@ def estatisticas_diarias_completa():
     data_fim    = request.args.get("data_fim")
     metodo      = request.args.get("metodo")
 
+    # Conectar e buscar a banca inicial do usuário
+    conn = sqlite3.connect("banco.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT banca_inicial FROM usuarios WHERE id = ?", (usuario_id,))
+    resultado = cursor.fetchone()
+    banca_acumulada = float(resultado[0]) if resultado and resultado[0] is not None else 0.0
+
+    # Montar a query das apostas
     query = "SELECT data, stake, odd, valor_realizado FROM apostas WHERE usuario_id = ?"
     params = [usuario_id]
     if data_inicio:
@@ -527,12 +573,11 @@ def estatisticas_diarias_completa():
         query += " AND metodo = ?"
         params.append(metodo)
 
-    conn = sqlite3.connect("banco.db")
-    cursor = conn.cursor()
     cursor.execute(query, params)
     rows = cursor.fetchall()
     conn.close()
 
+    # Agrupar por dia
     daily = OrderedDict()
     for data_str, stake, odd, valor_realizado in rows:
         try:
@@ -546,15 +591,14 @@ def estatisticas_diarias_completa():
         })
 
     resultados = []
-    banca_acumulada = 50.0
 
     for dia, apostas_list in daily.items():
         qtd_entradas = len(apostas_list)
-        lucro_dia = sum(item["valor_realizado"]  for item in apostas_list)
+        lucro_dia = sum(item["valor_realizado"] for item in apostas_list)
         greens = sum(1 for item in apostas_list if item["valor_realizado"] > 0)
         reds = sum(1 for item in apostas_list if item["valor_realizado"] < 0)
-        odd_media = (sum(item["odd"] for item in apostas_list) / qtd_entradas) if qtd_entradas > 0 else 0
-        stake_media = (sum(item["stake"] for item in apostas_list) / qtd_entradas) if qtd_entradas > 0 else 0
+        odd_media = sum(item["odd"] for item in apostas_list) / qtd_entradas if qtd_entradas > 0 else 0
+        stake_media = sum(item["stake"] for item in apostas_list) / qtd_entradas if qtd_entradas > 0 else 0
 
         pct_lucro = 0.0 if banca_acumulada <= 0 else (lucro_dia / banca_acumulada) * 100
 
@@ -614,7 +658,7 @@ def editar_banca():
     return render_template("editar_banca.html", banca_atual=banca_atual)
 
 
-@app.route('/perfil')
+@app.route('/perfil', methods=['GET', 'POST'])
 def perfil():
     usuario_id = session.get('usuario_id')
     if not usuario_id:
@@ -623,7 +667,24 @@ def perfil():
     conn = conectar_banco()
     cursor = conn.cursor()
 
-    # Recupera nome, email, banca inicial
+    # Processar POST para atualizar banca inicial
+    mensagem_sucesso = None
+    mensagem_erro = None
+    if request.method == 'POST':
+        try:
+            nova_banca = float(request.form.get('nova_banca', 0))
+            if nova_banca < 0:
+                mensagem_erro = "O valor da banca deve ser maior ou igual a zero."
+            else:
+                cursor.execute("""
+                    UPDATE usuarios SET banca_inicial = ? WHERE id = ?
+                """, (nova_banca, usuario_id))
+                conn.commit()
+                mensagem_sucesso = f"Banca inicial atualizada para R$ {nova_banca:,.2f}".replace('.', ',')
+        except ValueError:
+            mensagem_erro = "Valor inválido. Digite um número válido."
+
+    # Recupera nome, email, banca inicial atualizado
     cursor.execute("""
         SELECT nome, email, banca_inicial
         FROM usuarios
@@ -632,6 +693,7 @@ def perfil():
     usuario = cursor.fetchone()
 
     if not usuario:
+        conn.close()
         return redirect(url_for('login'))
 
     nome, email, banca_inicial = usuario
@@ -645,10 +707,9 @@ def perfil():
     apostas = cursor.fetchall()
     conn.close()
 
-    lucro_total = sum([aposta['valor_realizado'] for aposta in apostas])
+    lucro_total = sum([aposta[0] for aposta in apostas])
     banca_atual = banca_inicial + lucro_total
 
-    # Evita divisão por zero
     rendimento_pct = ((banca_atual - banca_inicial) / banca_inicial * 100) if banca_inicial > 0 else 0
 
     return render_template('perfil.html',
@@ -656,10 +717,9 @@ def perfil():
                            email=email,
                            banca_inicial=banca_inicial,
                            banca_atual=banca_atual,
-                           rendimento_pct=rendimento_pct)
-
-
-
+                           rendimento_pct=rendimento_pct,
+                           mensagem_sucesso=mensagem_sucesso,
+                           mensagem_erro=mensagem_erro)
 
 
 @app.template_filter('br_moeda')
@@ -684,25 +744,20 @@ def dashboard():
     result = cursor.fetchone()
     banca_inicial = float(result[0]) if result and result[0] is not None else 0.0
 
-    # Total de entradas (número de apostas feitas)
     cursor.execute("SELECT COUNT(*) FROM apostas WHERE usuario_id = ?", (usuario_id,))
     total_entradas = cursor.fetchone()[0] or 0
 
-    # Total de greens (lucro positivo ou valor_realizado > stake)
     cursor.execute("""
         SELECT COUNT(*) FROM apostas 
         WHERE usuario_id = ? AND valor_realizado > 0
     """, (usuario_id,))
     total_greens = cursor.fetchone()[0] or 0
 
-    # Total de reds (lucro negativo ou valor_realizado < stake)
     cursor.execute("""
         SELECT COUNT(*) FROM apostas 
         WHERE usuario_id = ? AND valor_realizado < 0
     """, (usuario_id,))
     total_reds = cursor.fetchone()[0] or 0
-
-    # Caso queira considerar empates (valor_realizado == stake) pode adaptar depois
 
     cursor.execute("SELECT SUM(stake) FROM apostas WHERE usuario_id = ?", (usuario_id,))
     total_stake = cursor.fetchone()[0] or 0.0
@@ -714,7 +769,8 @@ def dashboard():
     roi = (lucro / total_stake * 100) if total_stake > 0 else 0.0
     banca_atual = banca_inicial + lucro
 
-    # Pega lucro por método
+    rendimento_pct = ((banca_atual - banca_inicial) / banca_inicial * 100) if banca_inicial > 0 else 0.0
+
     cursor.execute("""
         SELECT metodo, SUM(valor_realizado) as lucro_metodo
         FROM apostas
@@ -723,7 +779,6 @@ def dashboard():
     """, (usuario_id,))
     lucro_por_metodo_rows = cursor.fetchall()
 
-    # Separar dados para gráfico
     metodos = []
     lucros_metodo = []
     for metodo, lucro_met in lucro_por_metodo_rows:
@@ -742,9 +797,9 @@ def dashboard():
                            lucro=lucro,
                            roi=roi,
                            banca_atual=banca_atual,
+                           rendimento_pct=rendimento_pct,
                            metodos=metodos,
                            lucros_metodo=lucros_metodo)
-
 
     
 @app.route('/historico')
@@ -826,6 +881,171 @@ def projecao():
             return f"Erro ao calcular projeção: {e}"
 
     return render_template('projecao.html', resultados=resultados)
+
+API_KEY = "1aad7161eb43d298147857d33667dc62"  # sua chave da API
+
+@app.route("/jogos_ao_vivo")
+def jogos_ao_vivo():
+    url = "https://v3.football.api-sports.io/fixtures?live=all"
+    headers = {
+        "x-apisports-key": API_KEY
+    }
+
+    response = requests.get(url, headers=headers)
+
+    if response.status_code != 200:
+        return f"Erro ao buscar jogos ao vivo: {response.status_code} - {response.text}"
+
+    data = response.json()
+
+    if not data.get("response"):
+        return "Nenhum jogo ao vivo encontrado."
+
+    jogos = []
+
+    for fixture in data["response"]:
+        fixture_id = fixture["fixture"]["id"]
+        equipes = f"{fixture['teams']['home']['name']} x {fixture['teams']['away']['name']}"
+        tempo = fixture.get("fixture", {}).get("status", {}).get("elapsed", 0)
+
+        # Buscar estatísticas
+        stats_url = f"https://v3.football.api-sports.io/fixtures/statistics?fixture={fixture_id}"
+        stats_response = requests.get(stats_url, headers=headers)
+
+        if stats_response.status_code != 200:
+            continue
+
+        stats_data = stats_response.json()
+
+        chutes_ao_gol = 0
+        ataques_perigosos = 0
+
+        for team_stats in stats_data.get("response", []):
+            for stat in team_stats.get("statistics", []):
+                if stat["type"] == "Shots on Goal" and isinstance(stat["value"], int):
+                    chutes_ao_gol += stat["value"]
+                if stat["type"] == "Dangerous Attacks" and isinstance(stat["value"], int):
+                    ataques_perigosos += stat["value"]
+
+        jogos.append({
+            "jogo": equipes,
+            "minuto": tempo,
+            "chutes_ao_gol": chutes_ao_gol,
+            "ataques_perigosos": ataques_perigosos
+        })
+
+    return render_template("jogos_ao_vivo.html", jogos=jogos)
+
+
+@app.route("/alertas")
+def alertas():
+    url = "https://v3.football.api-sports.io/fixtures?live=all"
+    headers = {
+        "x-apisports-key": API_KEY
+    }
+
+    response = requests.get(url, headers=headers)
+
+    if response.status_code != 200:
+        return f"Erro ao buscar jogos ao vivo: {response.status_code} - {response.text}"
+
+    data = response.json()
+
+    if not data.get("response"):
+        return "Nenhum jogo ao vivo encontrado."
+
+    alertas_gol = []
+
+    for fixture in data["response"]:
+        fixture_id = fixture["fixture"]["id"]
+        equipes = f"{fixture['teams']['home']['name']} x {fixture['teams']['away']['name']}"
+        tempo = fixture.get("fixture", {}).get("status", {}).get("elapsed", 0)
+
+        stats_url = f"https://v3.football.api-sports.io/fixtures/statistics?fixture={fixture_id}"
+        stats_response = requests.get(stats_url, headers=headers)
+
+        if stats_response.status_code != 200:
+            continue  # Pula esse jogo se der erro
+
+        stats_data = stats_response.json()
+
+        chutes_ao_gol = 0
+        ataques_perigosos = 0
+
+        for team_stats in stats_data.get("response", []):
+            for stat in team_stats.get("statistics", []):
+                if stat["type"] == "Shots on Goal" and isinstance(stat["value"], int):
+                    chutes_ao_gol += stat["value"]
+                if stat["type"] == "Dangerous Attacks" and isinstance(stat["value"], int):
+                    ataques_perigosos += stat["value"]
+
+        if tempo >= 1 and ataques_perigosos > 1 and chutes_ao_gol >= 1:
+            alertas_gol.append({
+                "jogo": equipes,
+                "minuto": tempo,
+                "chutes": chutes_ao_gol,
+                "ataques": ataques_perigosos
+            })
+
+    return render_template("alertas.html", alertas=alertas_gol)
+
+
+
+@app.route('/cadastrar_metodo', methods=['GET', 'POST'])
+def cadastrar_metodo():
+    if request.method == 'POST':
+        nome = request.form['nome']
+        usuario_id = session.get('usuario_id')  # se tiver controle por usuário
+
+        conn = sqlite3.connect('banco.db')
+        c = conn.cursor()
+        c.execute('INSERT INTO metodos (nome, usuario_id) VALUES (?, ?)', (nome, usuario_id))
+        conn.commit()
+        conn.close()
+
+        return redirect(url_for('cadastrar_metodo'))
+
+    return render_template('cadastrar_metodo.html')
+
+def contar_reds_seguidos_por_metodo(usuario_id):
+    import sqlite3
+    from collections import defaultdict
+
+    conn = sqlite3.connect("banco.db")
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT metodo, valor_realizado
+        FROM apostas
+        WHERE usuario_id = ?
+        ORDER BY data DESC, id DESC
+    """, (usuario_id,))
+
+    historico = cursor.fetchall()
+    conn.close()
+
+    contagem_reds = defaultdict(int)
+    analisados = set()
+
+    for metodo, valor_realizado in historico:
+        if metodo in analisados:
+            continue
+        if valor_realizado < 0:
+            contagem_reds[metodo] += 1
+        else:
+            analisados.add(metodo)
+
+    return contagem_reds
+
+
+@app.route("/status_reds")
+def status_reds():
+    if "usuario_id" not in session:
+        return redirect("/login")
+
+    usuario_id = session["usuario_id"]
+    reds_por_metodo = contar_reds_seguidos_por_metodo(usuario_id)
+    return render_template("status_reds.html", reds=reds_por_metodo)
 
 
 if __name__ == "__main__":
