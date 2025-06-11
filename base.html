@@ -9,7 +9,6 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 
   <style>
-    /* Reset e base */
     * {
       margin: 0; padding: 0; box-sizing: border-box;
     }
@@ -22,13 +21,14 @@
       transition: margin-left 0.3s ease;
     }
 
-    /* Sidebar */
     nav {
       background-color: #1e1e1e;
-      position: fixed; top: 0; bottom: 0; left: 0;
+      position: fixed;
+      top: 0; bottom: 0; left: 0;
       width: 240px;
       padding: 20px 10px;
-      display: flex; flex-direction: column;
+      display: flex;
+      flex-direction: column;
       overflow: hidden;
       transition: width 0.3s ease, padding 0.3s ease;
     }
@@ -42,16 +42,14 @@
       align-items: center;
     }
     .logo {
-  margin-bottom: 40px;
-  transition: all 0.3s ease;
-  padding-right: 10;
+      margin-bottom: 40px;
+      transition: all 0.3s ease;
     }
     .logo img {
-      height: 150px;
+      height: 110px;
       width: 100%;
-      object-fit: cover; /* ou 'contain', se preferir manter proporções */
+      object-fit: cover;
       display: block;
-      margin: 0;
     }
     nav.collapsed .logo {
       opacity: 0;
@@ -60,7 +58,6 @@
       pointer-events: none;
     }
 
-    /* Links do menu */
     nav a {
       color: #eee;
       text-decoration: none;
@@ -94,35 +91,31 @@
       display: none;
     }
 
-    /* Botão de colapso */
     .toggle-btn {
       background: transparent;
       border: none;
       color: #2c2c3e;
       font-size: 1.5rem;
       cursor: pointer;
-    /*  transition: transform 0.3s ease;*/
     }
-    /*.toggle-btn i {
-      transition: transform 0.3s ease;
-    }*/
     nav.collapsed .toggle-btn i {
       transform: rotate(180deg);
     }
 
-    /* Conteúdo principal */
     .main-content {
       margin-left: 240px;
       padding: 30px;
       flex: 1;
       min-height: 100vh;
-      /*transition: margin-left 0.3s ease;*/
     }
     body.menu-collapsed .main-content {
       margin-left: 70px;
     }
 
-    /* Responsivo */
+    .logout {
+      margin-top: auto;
+    }
+
     @media (max-width: 768px) {
       nav {
         position: relative;
@@ -172,45 +165,49 @@
       </div>
     </div>
 
-    <!-- Menu de navegação -->
+    <!-- Menu principal -->
     <a href="{{ url_for('dashboard') }}" class="{% if request.endpoint == 'dashboard' %}active{% endif %}">
       <i class="fas fa-chart-pie"></i><span class="link-text">Dashboard</span>
-    </a>
-    <a href="{{ url_for('apostas') }}" class="{% if request.endpoint == 'apostas' %}active{% endif %}">
-      <i class="fas fa-list"></i><span class="link-text">Histórico</span>
-    </a>
-    <a href="{{ url_for('estatisticas') }}" class="{% if request.endpoint == 'estatisticas' %}active{% endif %}">
-      <i class="fas fa-chart-line"></i><span class="link-text">Evolução da Banca</span>
-    </a>
-    <a href="{{ url_for('estatisticas_diarias_completa') }}" class="{% if request.endpoint == 'estatisticas_diarias_completa' %}active{% endif %}">
-      <i class="fas fa-chart-bar"></i><span class="link-text">Estatísticas Diárias</span>
-    </a>
-    <a href="{{ url_for('calendario') }}" class="{% if request.endpoint == 'calendario' %}active{% endif %}">
-      <i class="fas fa-calendar"></i><span class="link-text">Calendário</span>
-    </a>
-    <a href="{{ url_for('projecao') }}" class="{% if request.endpoint == 'projecao' %}active{% endif %}">
-      <i class="fas fa-chart-area"></i><span class="link-text">Projeção</span>
     </a>
     <a href="{{ url_for('index') }}" class="{% if request.endpoint == 'index' %}active{% endif %}">
       <i class="fas fa-arrow-left"></i><span class="link-text">Cadastro de Entradas</span>
     </a>
+    <a href="{{ url_for('apostas') }}" class="{% if request.endpoint == 'apostas' %}active{% endif %}">
+      <i class="fas fa-list"></i><span class="link-text">Histórico</span>
+    </a>
+    <a href="{{ url_for('calendario') }}" class="{% if request.endpoint == 'calendario' %}active{% endif %}">
+      <i class="fas fa-calendar"></i><span class="link-text">Calendário</span>
+    </a>
+    <a href="{{ url_for('estatisticas_diarias_completa') }}" class="{% if request.endpoint == 'estatisticas_diarias_completa' %}active{% endif %}">
+      <i class="fas fa-chart-bar"></i><span class="link-text">Estatísticas Diárias</span>
+    </a>
+    <a href="{{ url_for('estatisticas_mensais') }}" class="{% if request.endpoint == 'estatisticas_mensais' %}active{% endif %}">
+      <i class="fas fa-chart-bar"></i><span class="link-text">Estatísticas Mensais</span>
+    </a>
+    <a href="{{ url_for('estatisticas') }}" class="{% if request.endpoint == 'estatisticas' %}active{% endif %}">
+      <i class="fas fa-chart-line"></i><span class="link-text">Evolução da Banca</span>
+    </a>
+    <a href="{{ url_for('graficos') }}" class="btn">📊 Gráficos</a>
+    <a href="{{ url_for('projecao') }}" class="{% if request.endpoint == 'projecao' %}active{% endif %}">
+      <i class="fas fa-chart-area"></i><span class="link-text">Projeção</span>
+    </a>
     <a href="{{ url_for('perfil') }}" class="{% if request.endpoint == 'perfil' %}active{% endif %}">
-    <i class="fas fa-user"></i><span class="link-text">Perfil</span>
+      <i class="fas fa-user"></i><span class="link-text">Perfil</span>
     </a>  
     <a href="{{ url_for('status_reds') }}" class="{% if request.endpoint == 'status_reds' %}active{% endif %}">
-    <i class="fas fa-chart-line"></i><span class="link-text">Bad Run</span>
-    </a>  
-    <a href="{{ url_for('logout') }}" class="{% if request.endpoint == 'logout' %}active{% endif %}">
-      <i class="fas fa-sign-out-alt"></i><span class="link-text">Sair</span>
+      <i class="fas fa-ban"></i><span class="link-text">Bad Run</span>
     </a>
-  </nav>
+    <a href="{{ url_for('logout') }}" class="{% if request.endpoint == 'logout' %}active{% endif %}">
+        <i class="fas fa-sign-out-alt"></i><span class="link-text">Sair</span>
+      </a>
+     </nav>
 
-  <!-- Conteúdo dinâmico -->
+  <!-- Conteúdo principal -->
   <div class="main-content" id="mainContent">
     {% block content %}{% endblock %}
   </div>
 
-  <!-- Script de interação -->
+  <!-- Script -->
   <script>
     const toggleBtn = document.getElementById('toggleBtn');
     const sidebar = document.getElementById('sidebar');
@@ -221,7 +218,6 @@
       body.classList.toggle('menu-collapsed');
     });
 
-    // Tecla "m" também recolhe/expande o menu
     document.addEventListener('keydown', (e) => {
       if (e.key === 'm') {
         sidebar.classList.toggle('collapsed');
