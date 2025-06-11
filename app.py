@@ -13,6 +13,14 @@ app.secret_key = "sua_chave_secreta_aqui"  # Lembre de
 
 API_KEY = "1aad7161eb43d298147857d33667dc62"
 
+@app.template_filter('brl')
+def brl_format(valor):
+    if valor is None:
+        return "R$ 0,00"
+    return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+
 # Filtro Jinja para trocar ponto por vírgula
 def ponto_para_virgula(valor):
     return str(valor).replace('.', ',')
@@ -405,22 +413,38 @@ def estatisticas():
 
     usuario_id = session["usuario_id"]
 
-    # Exemplo: pegar a banca inicial do banco (recomendo esse caminho)
+    data_inicio = request.args.get("data_inicio")
+    data_fim = request.args.get("data_fim")
+
+    # Buscar banca inicial
     conn = sqlite3.connect("banco.db")
     cursor = conn.cursor()
     cursor.execute("SELECT banca_inicial FROM usuarios WHERE id = ?", (usuario_id,))
     result = cursor.fetchone()
     banca_inicial = result[0] if result else 0.0
 
-    cursor.execute("""
+    # Construir a query com filtros opcionais
+    query = """
         SELECT data, stake, odd, valor_realizado
         FROM apostas
         WHERE usuario_id = ?
-        ORDER BY data
-    """, (usuario_id,))
+    """
+    params = [usuario_id]
+
+    if data_inicio:
+        query += " AND data >= ?"
+        params.append(data_inicio)
+    if data_fim:
+        query += " AND data <= ?"
+        params.append(data_fim)
+
+    query += " ORDER BY data"
+
+    cursor.execute(query, params)
     rows = cursor.fetchall()
     conn.close()
 
+    # Agrupar por dia
     daily = OrderedDict()
     for data_str, stake, odd, valor_realizado in rows:
         try:
@@ -438,10 +462,15 @@ def estatisticas():
         saldo += sum(valores)
         banca.append(round(saldo, 2))
 
-    return render_template("estatisticas.html",
-                           labels=labels,
-                           banca=banca,
-                           banca_inicial=banca_inicial)
+    return render_template(
+        "estatisticas.html",
+        labels=labels,
+        banca=banca,
+        banca_inicial=banca_inicial,
+        data_inicio=data_inicio,
+        data_fim=data_fim
+    )
+
 
 
 
@@ -655,11 +684,18 @@ def editar_banca():
     result = cursor.fetchone()
     banca_atual = result[0] if result else 0.0
     conn.close()
+    
     return render_template("editar_banca.html", banca_atual=banca_atual)
 
 
 @app.route('/perfil', methods=['GET', 'POST'])
 def perfil():
+    def formatar_real(valor):
+        return f"R$ {valor:,.2f}".replace(",", "v").replace(".", ",").replace("v", ".")
+
+    def formatar_percentual(valor):
+        return f"{valor:,.2f}%".replace(",", "v").replace(".", ",").replace("v", ".")
+
     usuario_id = session.get('usuario_id')
     if not usuario_id:
         return redirect(url_for('login'))
@@ -680,11 +716,11 @@ def perfil():
                     UPDATE usuarios SET banca_inicial = ? WHERE id = ?
                 """, (nova_banca, usuario_id))
                 conn.commit()
-                mensagem_sucesso = f"Banca inicial atualizada para R$ {nova_banca:,.2f}".replace('.', ',')
+                mensagem_sucesso = f"Banca inicial atualizada para {formatar_real(nova_banca)}"
         except ValueError:
             mensagem_erro = "Valor inválido. Digite um número válido."
 
-    # Recupera nome, email, banca inicial atualizado
+    # Recupera nome, email, banca inicial atualizada
     cursor.execute("""
         SELECT nome, email, banca_inicial
         FROM usuarios
@@ -712,12 +748,17 @@ def perfil():
 
     rendimento_pct = ((banca_atual - banca_inicial) / banca_inicial * 100) if banca_inicial > 0 else 0
 
+    # Formatação dos valores
+    banca_inicial_formatada = formatar_real(banca_inicial)
+    banca_atual_formatada = formatar_real(banca_atual)
+    rendimento_formatado = formatar_percentual(rendimento_pct)
+
     return render_template('perfil.html',
                            nome=nome,
                            email=email,
-                           banca_inicial=banca_inicial,
-                           banca_atual=banca_atual,
-                           rendimento_pct=rendimento_pct,
+                           banca_inicial=banca_inicial_formatada,
+                           banca_atual=banca_atual_formatada,
+                           rendimento_pct=rendimento_formatado,
                            mensagem_sucesso=mensagem_sucesso,
                            mensagem_erro=mensagem_erro)
 
@@ -768,8 +809,8 @@ def dashboard():
     lucro = total_valor_realizado 
     roi = (lucro / total_stake * 100) if total_stake > 0 else 0.0
     banca_atual = banca_inicial + lucro
-
     rendimento_pct = ((banca_atual - banca_inicial) / banca_inicial * 100) if banca_inicial > 0 else 0.0
+    winrate = (total_greens / total_entradas * 100) if total_entradas > 0 else 0
 
     cursor.execute("""
         SELECT metodo, SUM(valor_realizado) as lucro_metodo
@@ -799,7 +840,8 @@ def dashboard():
                            banca_atual=banca_atual,
                            rendimento_pct=rendimento_pct,
                            metodos=metodos,
-                           lucros_metodo=lucros_metodo)
+                           lucros_metodo=lucros_metodo,
+                           winrate=winrate)
 
     
 @app.route('/historico')
@@ -823,6 +865,7 @@ def historico():
     return render_template('historico.html', apostas=apostas)
 
 @app.route('/projecao', methods=['GET', 'POST'])
+
 def projecao():
     if 'usuario_id' not in session:
         return redirect(url_for('login'))
@@ -862,6 +905,8 @@ def projecao():
                 cur = db.execute(query, (usuario_id, data_str))
                 row = cur.fetchone()
                 lucro_real_dia = row['lucro_real'] if row else 0
+
+
 
                 # Atualiza banca real acumulada
                 banca_real_acumulada += lucro_real_dia
@@ -1046,6 +1091,240 @@ def status_reds():
     usuario_id = session["usuario_id"]
     reds_por_metodo = contar_reds_seguidos_por_metodo(usuario_id)
     return render_template("status_reds.html", reds=reds_por_metodo)
+
+@app.route('/graficos')
+def graficos():
+    if 'usuario_id' not in session:
+        return redirect('/login')
+
+    usuario_id = session['usuario_id']
+    data_inicio = request.args.get('data_inicio')
+    data_fim = request.args.get('data_fim')
+
+    conn = sqlite3.connect('banco.db')  # usar o mesmo banco das outras rotas
+    cursor = conn.cursor()
+
+    # Montar consulta dinâmica
+    query = """
+        SELECT metodo,
+               COUNT(*) as total,
+               SUM(CASE WHEN valor_realizado > 0 THEN 1 ELSE 0 END) as greens,
+               SUM(CASE WHEN valor_realizado < 0 THEN 1 ELSE 0 END) as reds,
+               SUM(valor_realizado) as lucro
+        FROM apostas
+        WHERE usuario_id = ?
+    """
+    params = [usuario_id]
+
+    if data_inicio and data_fim:
+        query += " AND DATE(data) BETWEEN ? AND ?"
+        params.extend([data_inicio, data_fim])
+
+    query += " GROUP BY metodo"
+
+    cursor.execute(query, params)
+    resultados = cursor.fetchall()
+    conn.close()
+
+    metodos = []
+    total_por_metodo = []
+    greens_por_metodo = []
+    reds_por_metodo = []
+    lucros_por_metodo = []
+
+    for row in resultados:
+        metodo = row[0] or "Sem Método"
+        metodos.append(metodo)
+        total_por_metodo.append(row[1])
+        greens_por_metodo.append(row[2])
+        reds_por_metodo.append(row[3])
+        lucros_por_metodo.append(round(row[4] or 0.0, 2))
+
+    return render_template(
+        'graficos.html',
+        metodos=metodos,
+        total_por_metodo=total_por_metodo,
+        greens_por_metodo=greens_por_metodo,
+        reds_por_metodo=reds_por_metodo,
+        lucros_por_metodo=lucros_por_metodo,
+        data_inicio=data_inicio,
+        data_fim=data_fim,
+        datas_lucro=[],
+        valores_lucro=[]
+    )
+
+def obter_banca_inicial(usuario_id):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute('SELECT banca_inicial FROM usuarios WHERE id = ?', (usuario_id,))
+    result = cursor.fetchone()
+    conn.close()
+    return result['banca_inicial'] if result else 0
+
+
+@app.route('/estatisticas_mensais')
+def estatisticas_mensais():
+    if 'usuario_id' not in session:
+        return redirect(url_for('login'))
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute('''
+        SELECT 
+            strftime('%Y-%m', data) AS mes,
+            COUNT(*) AS qtd_entradas,
+            SUM(CASE WHEN valor_realizado > 0 THEN 1 ELSE 0 END) AS greens,
+            SUM(CASE WHEN valor_realizado < 0 THEN 1 ELSE 0 END) AS reds,
+            AVG(odd) AS odd_media,
+            AVG(stake) AS stake_media,
+            SUM(valor_realizado) AS lucro_mes
+        FROM apostas
+        WHERE usuario_id = ?
+        GROUP BY mes
+        ORDER BY mes DESC
+    ''', (session['usuario_id'],))
+
+    def obter_banca_inicial(usuario_id):
+        cur = get_db_connection().cursor()
+        cur.execute('SELECT banca_inicial FROM usuarios WHERE id = ?', (usuario_id,))
+        result = cur.fetchone()
+        return result['banca_inicial'] if result else 0
+
+    resultados = []
+    banca_inicial = obter_banca_inicial(session['usuario_id'])
+    banca_acumulada = banca_inicial
+    total_greens = 0
+    total_reds = 0
+
+    meses_pt = {
+        "01": "Janeiro", "02": "Fevereiro", "03": "Março", "04": "Abril",
+        "05": "Maio", "06": "Junho", "07": "Julho", "08": "Agosto",
+        "09": "Setembro", "10": "Outubro", "11": "Novembro", "12": "Dezembro"
+    }
+
+    for row in cursor.fetchall():
+        mes_ano = row['mes']
+        ano, mes = mes_ano.split('-')
+        nome_mes = meses_pt.get(mes, mes)
+        data_formatada = f"{nome_mes}/{ano}"
+
+        lucro_mes = row['lucro_mes'] or 0
+        banca_acumulada += lucro_mes
+        pct_lucro = (lucro_mes / banca_inicial * 100) if banca_inicial != 0 else 0
+
+        greens = row['greens'] or 0
+        reds = row['reds'] or 0
+        total_greens += greens
+        total_reds += reds
+
+        resultados.append({
+            'data': data_formatada,
+            'qtd_entradas': row['qtd_entradas'],
+            'greens': greens,
+            'reds': reds,
+            'odd_media': row['odd_media'] or 0,
+            'stake_media': row['stake_media'] or 0,
+            'lucro_mes': lucro_mes,
+            'pct_lucro': pct_lucro,
+            'banca_acumulada': banca_acumulada
+        })
+
+    # Totais finais para exibir no template (se necessário)
+    total_entradas = sum(r['qtd_entradas'] for r in resultados)
+    lucro_total = sum(r['lucro_mes'] for r in resultados)
+    pct_lucro_total = (lucro_total / banca_inicial * 100) if banca_inicial != 0 else 0
+    odd_media_total = (sum(r['odd_media'] * r['qtd_entradas'] for r in resultados) / total_entradas) if total_entradas else 0
+    stake_media_total = (sum(r['stake_media'] * r['qtd_entradas'] for r in resultados) / total_entradas) if total_entradas else 0
+
+    conn.close()
+
+    return render_template(
+        'estatisticas_mensais.html',
+        resultados=resultados,
+        total_entradas=total_entradas,
+        lucro_total=lucro_total,
+        pct_lucro_total=pct_lucro_total,
+        odd_media_total=odd_media_total,
+        stake_media_total=stake_media_total,
+        total_greens=total_greens,
+        total_reds=total_reds,
+        banca_final=banca_acumulada
+    )
+
+
+
+@app.route('/debug_resultados')
+def debug_resultados():
+    if 'usuario_id' not in session:
+        return redirect(url_for('login'))
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        SELECT DISTINCT resultado FROM apostas WHERE usuario_id = ?
+    ''', (session['usuario_id'],))
+    
+    resultados = [row['resultado'] for row in cursor.fetchall()]
+    conn.close()
+
+    return jsonify(resultados)
+
+
+@app.route("/estatisticas_por_metodo", methods=["GET", "POST"])
+def estatisticas_por_metodo():
+    if "usuario_id" not in session:
+        return redirect("/login")
+
+    usuario_id = session["usuario_id"]
+    data_inicio = request.args.get("data_inicio")
+    data_fim = request.args.get("data_fim")
+
+    conn = sqlite3.connect("banco.db")
+    cursor = conn.cursor()
+
+    query = """
+        SELECT metodo,
+               COUNT(*) as entradas,
+               SUM(CASE WHEN valor_realizado > 0 THEN 1 ELSE 0 END) as greens,
+               SUM(CASE WHEN valor_realizado < 0 THEN 1 ELSE 0 END) as reds,
+               AVG(stake) as stake_media,
+               AVG(odd) as odd_media,
+               SUM(valor_realizado) as lucro
+        FROM apostas
+        WHERE usuario_id = ?
+    """
+    params = [usuario_id]
+
+    if data_inicio and data_fim:
+        query += " AND date(data) BETWEEN ? AND ?"
+        params.extend([data_inicio, data_fim])
+
+    query += " GROUP BY metodo ORDER BY lucro DESC"
+    cursor.execute(query, params)
+    rows = cursor.fetchall()
+    conn.close()
+
+    # Organiza os resultados
+    resultados = []
+    for row in rows:
+        metodo, entradas, greens, reds, stake_media, odd_media, lucro = row
+        winrate = (greens / entradas) * 100 if entradas else 0
+        resultados.append({
+            "metodo": metodo,
+            "entradas": entradas,
+            "greens": greens,
+            "reds": reds,
+            "stake_media": stake_media or 0,
+            "odd_media": odd_media or 0,
+            "lucro": lucro or 0,
+            "winrate": winrate
+        })
+
+    return render_template("estatisticas_por_metodo.html", resultados=resultados,
+                           data_inicio=data_inicio, data_fim=data_fim)
+
 
 
 if __name__ == "__main__":
